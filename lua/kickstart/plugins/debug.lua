@@ -42,6 +42,7 @@ require('mason-nvim-dap').setup {
   ensure_installed = {
     -- Update this to ensure that you have the debuggers for the langs you want
     'delve',
+    'debugpy',
   },
 }
 
@@ -91,5 +92,80 @@ require('dap-go').setup {
     -- On Windows delve must be run attached or it crashes.
     -- See https://github.com/leoluz/nvim-dap-go/blob/main/README.md#configuring
     detached = vim.fn.has 'win32' == 0,
+  },
+}
+
+-- Python debugging configuration
+dap.adapters.python = function(cb, config)
+  if config.request == 'attach' then
+    ---@diagnostic disable-next-line: undefined-field
+    local port = (config.connect or {}).port
+    ---@diagnostic disable-next-line: undefined-field
+    local host = (config.connect or {}).host or '127.0.0.1'
+    cb {
+      type = 'server',
+      port = assert(port, '`connect.port` is required for a python attach request'),
+      host = host,
+      options = {
+        source_filetype = 'python',
+      },
+    }
+  else
+    -- Find the venv python
+    local cwd = vim.fn.getcwd()
+    local python_path = 'python3'
+    if vim.fn.executable(cwd .. '/venv/bin/python') == 1 then
+      python_path = cwd .. '/venv/bin/python'
+    elseif vim.fn.executable(cwd .. '/.venv/bin/python') == 1 then
+      python_path = cwd .. '/.venv/bin/python'
+    end
+
+    cb {
+      type = 'executable',
+      command = python_path,
+      args = { '-m', 'debugpy.adapter' },
+      options = {
+        source_filetype = 'python',
+      },
+    }
+  end
+end
+
+dap.configurations.python = {
+  {
+    type = 'python',
+    request = 'launch',
+    name = 'Launch file',
+    program = '${file}',
+    pythonPath = function()
+      local cwd = vim.fn.getcwd()
+      if vim.fn.executable(cwd .. '/venv/bin/python') == 1 then
+        return cwd .. '/venv/bin/python'
+      elseif vim.fn.executable(cwd .. '/.venv/bin/python') == 1 then
+        return cwd .. '/.venv/bin/python'
+      else
+        return 'python3'
+      end
+    end,
+  },
+  {
+    type = 'python',
+    request = 'launch',
+    name = 'Launch file with arguments',
+    program = '${file}',
+    args = function()
+      local args_string = vim.fn.input 'Arguments: '
+      return vim.split(args_string, ' +')
+    end,
+    pythonPath = function()
+      local cwd = vim.fn.getcwd()
+      if vim.fn.executable(cwd .. '/venv/bin/python') == 1 then
+        return cwd .. '/venv/bin/python'
+      elseif vim.fn.executable(cwd .. '/.venv/bin/python') == 1 then
+        return cwd .. '/.venv/bin/python'
+      else
+        return 'python3'
+      end
+    end,
   },
 }
